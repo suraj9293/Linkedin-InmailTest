@@ -246,6 +246,58 @@ Analyze this and respond in valid JSON only. No markdown, no explanation, no bac
 Generate exactly 11 scenarios. Cover: best version of their message, ecosystem credibility version, ultra-short (2-3 sentences), content hook version, curiosity gap version, inbound response version, peer intelligence version, challenge/insight version, role adjacency version, credibility drop version, and one wildcard. Each scenario must be unique and immediately usable. Be brutally honest about what's weak.`;
 }
 
+function normalizeResult(data) {
+  if (!data) return null;
+
+  // If old shape already comes back, keep it
+  if (data.overallScore || data.scoreLabel || data.formatRecommendation) {
+    return data;
+  }
+
+  const recommended =
+    typeof data.format_decision === "string" &&
+    data.format_decision.toLowerCase().includes("concise")
+      ? "concise"
+      : "descriptive";
+
+  return {
+    overallScore: data.score ?? 0,
+    scoreLabel: data.verdict ?? "—",
+    primaryVerdict: data.format_rationale ?? "",
+    formatRecommendation: {
+      recommended,
+      conciseRationale:
+        recommended === "concise" ? (data.format_rationale ?? "") : "",
+      descriptiveRationale:
+        recommended === "descriptive" ? (data.format_rationale ?? "") : "",
+      idealWordCount:
+        data.ideal_word_count != null ? String(data.ideal_word_count) : "",
+      openingStrategy: data.opening_strategy ?? ""
+    },
+    signalAnalysis: data.signalAnalysis ?? {
+      presentSignals: [],
+      missingSignals: [],
+      harmfulElements: []
+    },
+    scenarios: (data.scenarios || []).map((sc, i) => ({
+      id: sc.id ?? i + 1,
+      name: sc.name || sc.variant_title || sc.variant_type || `Scenario ${i + 1}`,
+      type: sc.type || sc.variant_type || "alternative",
+      targetContext: sc.targetContext || sc.variant_type || "",
+      estimatedResponseRate:
+        sc.estimatedResponseRate || sc.estimated_response_rate || "—",
+      rrColor: sc.rrColor || "amber",
+      message: sc.message || sc.variant_message || "",
+      signals: Array.isArray(sc.signals)
+        ? sc.signals
+        : sc.signals
+          ? [sc.signals]
+          : []
+    })),
+    strategicRules: data.strategicRules || data.strategic_rules || []
+  };
+}
+
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
 export default function App() {
   const [tab, setTab] = useState("analyze");
@@ -314,20 +366,21 @@ export default function App() {
           throw new Error(data?.error || "Request failed");
         }
 
-        setResult(data);
+          const parsed = normalizeResult(data);
+          setResult(parsed);
 
-        const entry = {
-          id: Date.now(),
-          date: new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
-          targetName: form.targetName,
-          targetRole: form.targetRole,
-          targetCompany: form.targetCompany,
-          seniority: form.seniority,
-          messagePreview: form.message.slice(0, 80) + "...",
-          score: data.score,
-          scoreLabel: data.verdict,
-          format: data.format_decision,
-          wordCount: wc,
+          const entry = {
+            id: Date.now(),
+            date: new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
+            targetName: form.targetName,
+            targetRole: form.targetRole,
+            targetCompany: form.targetCompany,
+            seniority: form.seniority,
+            messagePreview: form.message.slice(0, 80) + "...",
+            score: parsed.overallScore,
+            scoreLabel: parsed.scoreLabel,
+            format: parsed.formatRecommendation?.recommended,
+            wordCount: wc,
         };
 
         await saveToHistory(entry);
@@ -439,7 +492,7 @@ export default function App() {
               <div className="verdict-header">
                 <div>
                   <div className="verdict-label">Overall Assessment</div>
-                 <div className="verdict-title" style={{color:scoreColor(result.score)}}>{result.verdict}</div>
+                 <div className="verdict-title" style={{color:scoreColor(result.overallScore)}}>{result.scoreLabel}</div>
                 </div>
                 <div className="score-ring" style={{borderColor:scoreColor(result.overallScore)}}>
                   <div className="score-num" style={{color:scoreColor(result.overallScore)}}>{result.overallScore}</div>
@@ -449,7 +502,7 @@ export default function App() {
               <div className="verdict-body">
                 <div className="verdict-row">
                   <div className="v-icon">◈</div>
-                  <div className="v-text">{result.format_rationale}</div>
+                  <div className="v-text">{result.primaryVerdict}</div>
                 </div>
                 {result.signalAnalysis?.missingSignals?.length > 0 && (
                   <div className="verdict-row">
@@ -473,73 +526,67 @@ export default function App() {
             </div>
 
             {/* FORMAT RECOMMENDATION */}
-            {result.format_decision && (
-              <div className="format-rec fade-in">
-                <div className="format-label">Format Verdict · {result.ideal_word_count} ideal</div>
-                <div className="format-toggle">
-                 {["concise","descriptive"].map(f=>(
-                  <div key={f} className={`format-opt ${result.format_decision===f?"rec":"not"}`}>
-                    <div className="fo-title">{f==="concise"?"2–3 Sentences":"Full Message"}</div>
-                    <div className="fo-desc">
-                      {result.format_rationale}
-                  </div>
-                  {result.format_decision===f && <div className="fo-badge">▸ Recommended</div>}
-                </div>
-               ))}
-              </div>
-              <div style={{padding:"10px 12px",background:"rgba(0,0,0,.3)",borderRadius:8,fontSize:12,color:"#94a3b8",lineHeight:1.65,borderLeft:"2px solid var(--amber)"}}>
-                <strong style={{color:"var(--amber)"}}>Opening strategy:</strong> {result.opening_strategy}
-              </div>
-            </div>
+            {result.formatRecommendation && (
+  <div className="format-rec fade-in">
+    <div className="format-label">Format Verdict · {result.formatRecommendation.idealWordCount} ideal</div>
+    <div className="format-toggle">
+      {["concise","descriptive"].map(f=>(
+        <div key={f} className={`format-opt ${result.formatRecommendation.recommended===f?"rec":"not"}`}>
+          <div className="fo-title">{f==="concise"?"2–3 Sentences":"Full Message"}</div>
+          <div className="fo-desc">
+            {f==="concise"
+              ? result.formatRecommendation.conciseRationale
+              : result.formatRecommendation.descriptiveRationale}
+          </div>
+          {result.formatRecommendation.recommended===f && <div className="fo-badge">▸ Recommended</div>}
+        </div>
+      ))}
+    </div>
+    <div style={{padding:"10px 12px",background:"rgba(0,0,0,.3)",borderRadius:8,fontSize:12,color:"#94a3b8",lineHeight:1.65,borderLeft:"2px solid var(--amber)"}}>
+      <strong style={{color:"var(--amber)"}}>Opening strategy:</strong> {result.formatRecommendation.openingStrategy}
+    </div>
+  </div>
 )}
 
 
             {/* SCENARIOS */}
-            {result.scenarios?.length > 0 && (
-              <div className="scenarios fade-in">
-                <div className="sc-title">▸ {result.scenarios.length} Message Scenarios · Tap to expand</div>
-                <div className="stagger">
-                  {result.scenarios.map((sc,i)=>{
-                    const rr = rrPillStyle("amber");
-                    const isOpen = expanded===i;
-                    return (
-                      <div key={i} className={`sc-card ${isOpen?"expanded":""}`} onClick={()=>setExpanded(isOpen?null:i)}>
-                        <div className="sc-header">
-                          <div className="sc-left">
-                            <div className="sc-num">{String(i + 1).padStart(2,"0")}</div>
-                            <div>
-                              <div className="sc-name">{sc.variant_title || sc.variant_type}</div>
-                              <div className="sc-sub">{sc.variant_type}</div>
-                            </div>
-                          </div>
-                          <div className="sc-right">
-                            <div className="rr-pill" style={{background:rr.bg,border:`1px solid ${rr.border}`,color:rr.col}}
-                            >
-                              {sc.estimated_response_rate}
-                              </div>
-                              <div className={`sc-arrow ${isOpen?"open":""}`}>▼</div>
-                            </div>
-                        </div>
-                        {isOpen && (
-                          <div className="sc-body fade-in">
-                            <div className="sc-msg">{sc.variant_message}</div>
-                            <div className="sc-signals">{sc.signals?.map((s,j)=><span key={j} className="sig">{s}</span>)}</div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+            {result.scenarios.map((sc,i)=>{
+  const rr = rrPillStyle(sc.rrColor);
+  const isOpen = expanded===i;
+  return (
+    <div key={i} className={`sc-card ${isOpen?"expanded":""}`} onClick={()=>setExpanded(isOpen?null:i)}>
+      <div className="sc-header">
+        <div className="sc-left">
+          <div className="sc-num">{String(sc.id).padStart(2,"0")}</div>
+          <div>
+            <div className="sc-name">{sc.name}</div>
+            <div className="sc-sub">{sc.targetContext}</div>
+          </div>
+        </div>
+        <div className="sc-right">
+          <div className="rr-pill" style={{background:rr.bg,border:`1px solid ${rr.border}`,color:rr.col}}>
+            {sc.estimatedResponseRate}
+          </div>
+          <div className={`sc-arrow ${isOpen?"open":""}`}>▼</div>
+        </div>
+      </div>
+      {isOpen && (
+        <div className="sc-body fade-in">
+          <div className="sc-msg">{sc.message}</div>
+          <div className="sc-signals">{sc.signals?.map((s,j)=><span key={j} className="sig">{s}</span>)}</div>
+        </div>
+      )}
+    </div>
+  );
+})}
 
             {/* STRATEGIC RULES */}
-            {result.strategic_rules?.length > 0 && (
-              <div className="insight-panel fade-in">
-                <div className="ip-title">▸ Strategic rules for {form.targetName || "this profile"}</div>
-                {result.strategic_rules.map((r,i)=><div key={i} className="ip-line">{r}</div>)}
-              </div>
-            )}
+            {result.strategicRules?.length > 0 && (
+  <div className="insight-panel fade-in">
+    <div className="ip-title">▸ Strategic rules for {form.targetName || "this profile"}</div>
+    {result.strategicRules.map((r,i)=><div key={i} className="ip-line">{r}</div>)}
+  </div>
+)}
           </div>
         )}
 
