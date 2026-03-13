@@ -513,9 +513,12 @@ export default function App() {
                             </div>
                           </div>
                           <div className="sc-right">
-                            <div className="rr-pill" style={{background:rr.bg,border:`1px solid ${rr.border}`,color:rr.col}}>{sc.estimated_response_rate}</div>
-                            <div className={`sc-arrow ${isOpen?"open":""}`}>▼</div>
-                          </div>
+                            <div className="rr-pill" style={{background:rr.bg,border:`1px solid ${rr.border}`,color:rr.col}}
+                            >
+                              {sc.estimated_response_rate}
+                              </div>
+                              <div className={`sc-arrow ${isOpen?"open":""}`}>▼</div>
+                            </div>
                         </div>
                         {isOpen && (
                           <div className="sc-body fade-in">
