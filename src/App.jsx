@@ -280,58 +280,65 @@ export default function App() {
     try { await window.storage.set("outreach_history", JSON.stringify(updated)); } catch(e){}
   }
 
-  async function analyze() {
-    if (!form.message.trim() || !form.targetName.trim()) return;
-    setLoading(true); setResult(null); setError(null); setExpanded(null);
+    async function analyze() {
+      if (!form.message.trim() || !form.targetName.trim()) return;
+      setLoading(true);
+      setResult(null);
+      setError(null);
+      setExpanded(null);
 
-    let si = 0;
-    stepRef.current = setInterval(() => {
-      si = (si+1) % loadingSteps.length;
-      setLoadingStep(loadingSteps[si]);
-    }, 900);
+      let si = 0;
+      stepRef.current = setInterval(() => {
+        si = (si + 1) % loadingSteps.length;
+        setLoadingStep(loadingSteps[si]);
+      }, 900);
 
     try {
       const res = await fetch("/api/analyze", {
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model:"claude-sonnet-4-20250514",
-          max_tokens:4000,
-          system:"You are a LinkedIn outreach intelligence system. Return only valid JSON, no markdown, no backticks.",
-          messages:[{role:"user", content: buildPrompt(form)}]
-        })
-      });
+          target_name: form.targetName,
+          company: form.targetCompany,
+          role: form.targetRole,
+          seniority: form.seniority,
+          contact_context: form.context,
+          draft_message: form.message
+         })
+        });
 
-      clearInterval(stepRef.current);
-      const data = await res.json();
-      const raw = data.content.map(c=>c.text||"").join("");
-      const clean = raw.replace(/```json|```/g,"").trim();
-      const parsed = JSON.parse(clean);
+        clearInterval(stepRef.current);
+        const data = await res.json();
 
-      setResult(parsed);
+        if (!res.ok) {
+          throw new Error(data?.error || "Request failed");
+        }
 
-      // Save to history
-      const entry = {
-        id: Date.now(),
-        date: new Date().toLocaleDateString("en-GB",{day:"numeric",month:"short"}),
-        targetName: form.targetName,
-        targetRole: form.targetRole,
-        targetCompany: form.targetCompany,
-        seniority: form.seniority,
-        messagePreview: form.message.slice(0,80)+"...",
-        score: parsed.overallScore,
-        scoreLabel: parsed.scoreLabel,
-        format: parsed.formatRecommendation?.recommended,
-        wordCount: wc,
-      };
-      await saveToHistory(entry);
+        setResult(data);
 
-    } catch(e) {
-      clearInterval(stepRef.current);
-      setError("Analysis failed. Check your message and try again.");
+        const entry = {
+          id: Date.now(),
+          date: new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
+          targetName: form.targetName,
+          targetRole: form.targetRole,
+          targetCompany: form.targetCompany,
+          seniority: form.seniority,
+          messagePreview: form.message.slice(0, 80) + "...",
+          score: data.score,
+          scoreLabel: data.verdict,
+          format: data.format_decision,
+          wordCount: wc,
+        };
+
+        await saveToHistory(entry);
+
+      } catch (e) {
+        clearInterval(stepRef.current);
+        setError("Analysis failed. Check your message and try again.");
+      }
+
+      setLoading(false);
     }
-    setLoading(false);
-  }
 
   function scoreColor(s){ return s>=70?"var(--green)":s>=45?"var(--amber)":"var(--red)"; }
   function rrPillStyle(color){
@@ -432,7 +439,7 @@ export default function App() {
               <div className="verdict-header">
                 <div>
                   <div className="verdict-label">Overall Assessment</div>
-                  <div className="verdict-title" style={{color:scoreColor(result.overallScore)}}>{result.scoreLabel}</div>
+                 <div className="verdict-title" style={{color:scoreColor(result.score)}}>{result.verdict}</div>
                 </div>
                 <div className="score-ring" style={{borderColor:scoreColor(result.overallScore)}}>
                   <div className="score-num" style={{color:scoreColor(result.overallScore)}}>{result.overallScore}</div>
@@ -442,7 +449,7 @@ export default function App() {
               <div className="verdict-body">
                 <div className="verdict-row">
                   <div className="v-icon">◈</div>
-                  <div className="v-text">{result.primaryVerdict}</div>
+                  <div className="v-text">{result.format_rationale}</div>
                 </div>
                 {result.signalAnalysis?.missingSignals?.length > 0 && (
                   <div className="verdict-row">
@@ -466,23 +473,26 @@ export default function App() {
             </div>
 
             {/* FORMAT RECOMMENDATION */}
-            {result.formatRecommendation && (
+            {result.format_decision && (
               <div className="format-rec fade-in">
-                <div className="format-label">Format Verdict · {result.formatRecommendation.idealWordCount} ideal</div>
+                <div className="format-label">Format Verdict · {result.ideal_word_count} ideal</div>
                 <div className="format-toggle">
-                  {["concise","descriptive"].map(f=>(
-                    <div key={f} className={`format-opt ${result.formatRecommendation.recommended===f?"rec":"not"}`}>
-                      <div className="fo-title">{f==="concise"?"2–3 Sentences":"Full Message"}</div>
-                      <div className="fo-desc">{f==="concise"?result.formatRecommendation.conciseRationale:result.formatRecommendation.descriptiveRationale}</div>
-                      {result.formatRecommendation.recommended===f && <div className="fo-badge">▸ Recommended</div>}
-                    </div>
-                  ))}
+                 {["concise","descriptive"].map(f=>(
+                  <div key={f} className={`format-opt ${result.format_decision===f?"rec":"not"}`}>
+                    <div className="fo-title">{f==="concise"?"2–3 Sentences":"Full Message"}</div>
+                    <div className="fo-desc">
+                      {result.format_rationale}
+                  </div>
+                  {result.format_decision===f && <div className="fo-badge">▸ Recommended</div>}
                 </div>
-                <div style={{padding:"10px 12px",background:"rgba(0,0,0,.3)",borderRadius:8,fontSize:12,color:"#94a3b8",lineHeight:1.65,borderLeft:"2px solid var(--amber)"}}>
-                  <strong style={{color:"var(--amber)"}}>Opening strategy:</strong> {result.formatRecommendation.openingStrategy}
-                </div>
+               ))}
               </div>
-            )}
+              <div style={{padding:"10px 12px",background:"rgba(0,0,0,.3)",borderRadius:8,fontSize:12,color:"#94a3b8",lineHeight:1.65,borderLeft:"2px solid var(--amber)"}}>
+                <strong style={{color:"var(--amber)"}}>Opening strategy:</strong> {result.opening_strategy}
+              </div>
+            </div>
+)}
+
 
             {/* SCENARIOS */}
             {result.scenarios?.length > 0 && (
@@ -490,26 +500,26 @@ export default function App() {
                 <div className="sc-title">▸ {result.scenarios.length} Message Scenarios · Tap to expand</div>
                 <div className="stagger">
                   {result.scenarios.map((sc,i)=>{
-                    const rr = rrPillStyle(sc.rrColor);
+                    const rr = rrPillStyle("amber");
                     const isOpen = expanded===i;
                     return (
                       <div key={i} className={`sc-card ${isOpen?"expanded":""}`} onClick={()=>setExpanded(isOpen?null:i)}>
                         <div className="sc-header">
                           <div className="sc-left">
-                            <div className="sc-num">{String(sc.id).padStart(2,"0")}</div>
+                            <div className="sc-num">{String(i + 1).padStart(2,"0")}</div>
                             <div>
-                              <div className="sc-name">{sc.name}</div>
-                              <div className="sc-sub">{sc.targetContext}</div>
+                              <div className="sc-name">{sc.variant_title || sc.variant_type}</div>
+                              <div className="sc-sub">{sc.variant_type}</div>
                             </div>
                           </div>
                           <div className="sc-right">
-                            <div className="rr-pill" style={{background:rr.bg,border:`1px solid ${rr.border}`,color:rr.col}}>{sc.estimatedResponseRate}</div>
+                            <div className="rr-pill" style={{background:rr.bg,border:`1px solid ${rr.border}`,color:rr.col}}>{sc.estimated_response_rate}</div>
                             <div className={`sc-arrow ${isOpen?"open":""}`}>▼</div>
                           </div>
                         </div>
                         {isOpen && (
                           <div className="sc-body fade-in">
-                            <div className="sc-msg">{sc.message}</div>
+                            <div className="sc-msg">{sc.variant_message}</div>
                             <div className="sc-signals">{sc.signals?.map((s,j)=><span key={j} className="sig">{s}</span>)}</div>
                           </div>
                         )}
@@ -521,10 +531,10 @@ export default function App() {
             )}
 
             {/* STRATEGIC RULES */}
-            {result.strategicRules?.length > 0 && (
+            {result.strategic_rules?.length > 0 && (
               <div className="insight-panel fade-in">
                 <div className="ip-title">▸ Strategic rules for {form.targetName || "this profile"}</div>
-                {result.strategicRules.map((r,i)=><div key={i} className="ip-line">{r}</div>)}
+                {result.strategic_rules.map((r,i)=><div key={i} className="ip-line">{r}</div>)}
               </div>
             )}
           </div>
