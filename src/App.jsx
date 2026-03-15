@@ -78,7 +78,7 @@ export default function App() {
         if (data && data.scores) { setProfile(data); setProfileStatus("ready"); }
         else setProfileStatus("failed");
       } catch(e) { setProfileStatus("failed"); }
-    }, 1500);
+    }, 3000);
   }, [form.targetName, form.targetCompany, form.targetRole]);
 
   const wc = wordCount(form.message);
