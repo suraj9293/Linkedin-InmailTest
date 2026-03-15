@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import "./App.css";
-import { ShaderGradientCanvas, ShaderGradient } from "shadergradient";
+
 
 const SENIORITY_OPTS = ["Recruiter / TA Lead","Hiring Manager","Director","Senior Director / VP","C-Suite / Partner","Analyst / Researcher","Founder / Operator"];
 const CONTEXT_OPTS = ["Cold outreach — no prior contact","Responding to their inbound","Following up on a post/article they wrote","Referral / mutual connection","Reconnecting after an event"];
@@ -151,7 +151,7 @@ export default function App() {
 
   return (
     <>
-      <div className="gradient-canvas"><ShaderGradientCanvas style={{width:"100%",height:"100%"}}><ShaderGradient animate="on" bgColor1="#000000" bgColor2="#000000" brightness={1.1} cAzimuthAngle={180} cDistance={3.9} cPolarAngle={115} color1="#000000" color2="#fdf9fe" color3="#fffafc" destination="onCanvas" envPreset="city" type="waterPlane" uAmplitude={0} uDensity={1.1} uFrequency={5.5} uSpeed={0.1} uStrength={2.4} grain="off" lightType="3d" positionX={-0.5} positionY={0.1} positionZ={0} rotationZ={235}/></ShaderGradientCanvas></div>
+      
 <div className="app">
         <div className="hd">
           <div className="brand">

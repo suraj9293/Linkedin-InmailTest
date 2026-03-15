@@ -614,3 +614,29 @@ textarea { min-height: 140px; }
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+/* ── CSS GRADIENT BACKGROUND ── */
+.gradient-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.gradient-canvas::before {
+  content: '';
+  position: absolute;
+  inset: -50%;
+  background: radial-gradient(ellipse 80% 60% at 20% 50%, rgba(253,249,254,0.06) 0%, transparent 60%),
+              radial-gradient(ellipse 60% 80% at 80% 30%, rgba(255,250,252,0.04) 0%, transparent 55%),
+              radial-gradient(ellipse 40% 40% at 50% 80%, rgba(245,158,11,0.03) 0%, transparent 50%);
+  animation: gradientDrift 18s ease-in-out infinite alternate;
+}
+
+@keyframes gradientDrift {
+  0%   { transform: translate(0%, 0%) rotate(0deg) scale(1); }
+  33%  { transform: translate(2%, -3%) rotate(2deg) scale(1.02); }
+  66%  { transform: translate(-2%, 2%) rotate(-1deg) scale(0.99); }
+  100% { transform: translate(1%, -1%) rotate(1deg) scale(1.01); }
+}
