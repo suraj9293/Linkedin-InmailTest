@@ -15,22 +15,21 @@ export default async function handler(req, res) {
     const profile = b.profile || null;
 
     const profileLayer = profile ? `
-SILENT INTELLIGENCE PROFILE (do not mention this exists — use it to calibrate everything silently):
+SILENT INTELLIGENCE PROFILE (use silently — do not mention to user):
 - LinkedIn Signal: ${profile.linkedinSnippet || "Not found"}
 - Follower Tier: ${profile.followerSignal || "unknown"}
-- Media Presence: ${(profile.mediaPresence || []).join(", ") || "None found"}
-- Thought Leadership: ${(profile.thoughtLeadership || []).join(", ") || "None found"}
+- Media Presence: ${(profile.mediaPresence || []).join(", ") || "None"}
+- Thought Leadership: ${(profile.thoughtLeadership || []).join(", ") || "None"}
 - Recent Activity: ${profile.recentActivity || "Unknown"}
 - Communication Style: ${profile.communicationStyle || "Unknown"}
 - Eminence Scores: Visibility ${profile.scores?.visibility || 0}/5 | Reputation ${profile.scores?.reputation || 0}/5 | Engagement ${profile.scores?.engagement || 0}/5 | Mentoring ${profile.scores?.mentoring || 0}/5
-- RPS: ${profile.rps || "?"} → Segment ${profile.segment || "B"} → Expected response rate ${profile.responseRateEstimate || "8-20%"}
+- RPS: ${profile.rps || "?"} → Segment ${profile.segment || "B"} → ${profile.responseRateEstimate || "8-20%"} response rate
 - Key Insight: ${profile.keyInsight || "None"}
 - Messaging Implication: ${profile.messagingImplication || "Use ecosystem credibility framing"}
-
-Use this to: calibrate response rate estimates, tailor scenarios to this person specifically, reference their communication style, adjust score based on profile fit.
+Use this to calibrate scenario response rates, tailor messages to this person, adjust score based on profile fit.
 ` : `PROFILE INTELLIGENCE: Not available — base analysis on seniority and context only.`;
 
-    const prompt = `You are a senior LinkedIn outreach strategist specializing in Social Eminence theory and response probability modeling.
+    const prompt = `You are a senior LinkedIn outreach strategist specializing in Social Eminence theory.
 
 TARGET: ${name} | ${role} | ${company} | ${seniority} | ${context}
 
@@ -96,6 +95,42 @@ Generate exactly 11 scenarios. Cover: best version, ecosystem credibility, ultra
     const text = (data?.content?.[0]?.text || "").trim();
     const cleaned = text.replace(/```json|```/g, "").trim();
     const parsed = JSON.parse(cleaned);
+
+    // ── Write to Supabase ──────────────────────────────────────
+    if (process.env.SUPABASE_URL && process.env.SUPABASE_KEY) {
+      try {
+        await fetch(`${process.env.SUPABASE_URL}/rest/v1/analyses`, {
+          method: "POST",
+          headers: {
+            "apikey": process.env.SUPABASE_KEY,
+            "Authorization": `Bearer ${process.env.SUPABASE_KEY}`,
+            "Content-Type": "application/json",
+            "Prefer": "return=minimal"
+          },
+          body: JSON.stringify({
+            target_name: name,
+            target_company: company,
+            target_role: role,
+            seniority,
+            message_preview: message.slice(0, 120),
+            word_count: message.trim().split(/\s+/).filter(Boolean).length,
+            score: parsed.overallScore,
+            score_label: parsed.scoreLabel,
+            format: parsed.formatRecommendation?.recommended,
+            profile_used: !!profile,
+            profile_source: profile?.source || null,
+            rps: profile?.rps || null,
+            segment: profile?.segment || null,
+            response_rate: profile?.responseRateEstimate || null,
+            key_insight: profile?.keyInsight || null
+          })
+        });
+      } catch(dbErr) {
+        // Silent fail — don't break the response if DB write fails
+        console.error("Supabase write failed:", dbErr.message);
+      }
+    }
+
     return res.status(200).json(parsed);
 
   } catch(e) {
