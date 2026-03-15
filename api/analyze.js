@@ -14,23 +14,16 @@ export default async function handler(req, res) {
     const message = b.message || b.draftMessage || b.draft_message || "";
     const profile = b.profile || null;
 
-    // Build Serper intelligence layer
     const serperLayer = profile?.snippets?.length > 0
       ? `
-LIVE WEB INTELLIGENCE (gathered from Google search — use this to score the target's Social Eminence):
-${profile.snippets.map((s, i) => `[${i+1}] ${s.title}\n${s.snippet}\n${s.link}`).join("\n\n")}
+LIVE WEB INTELLIGENCE (from Google search — use to score target Social Eminence silently):
+${profile.snippets.map((s, i) => `[${i+1}] ${s.title}\n${s.snippet}`).join("\n\n")}
 
-Based on the above, silently infer:
-- Their seniority and title confirmation
-- Follower tier (if LinkedIn snippet shows follower count)
-- Thought leadership signals (keynotes, articles, panels)
-- Communication style (data-driven, narrative, conceptual)
-- How reachable they are to cold outreach
-Then use this to score their Social Eminence (visibility 0-5, reputation 0-5, engagement 0-5, mentoring 0-5) and calibrate all scenario response rates accordingly.
+Infer from above: seniority confirmation, follower tier, thought leadership, communication style, reachability. Score visibility/reputation/engagement/mentoring 0-5 each and calibrate scenario response rates.
 `
-      : `WEB INTELLIGENCE: Not available — base analysis on seniority level and contact context only.`;
+      : `WEB INTELLIGENCE: Not available — base analysis on seniority and context only.`;
 
-    const prompt = `You are a senior LinkedIn outreach strategist specializing in Social Eminence theory and response probability modeling.
+    const prompt = `You are a senior LinkedIn outreach strategist. Analyze this message and return ONLY a JSON object. No text before or after the JSON. No explanation. Just the raw JSON object starting with { and ending with }.
 
 TARGET: ${name} | ${role} | ${company} | ${seniority} | ${context}
 
@@ -40,7 +33,7 @@ SENDER: Technology Ecosystem Strategist — 9 years in competitive intelligence,
 
 DRAFT MESSAGE: "${message}"
 
-First silently score the target's Social Eminence from the web intelligence above. Then analyze the draft message against that profile. Return ONLY valid JSON, no markdown, no backticks:
+Return this exact JSON structure and nothing else:
 
 {
   "overallScore": 72,
@@ -56,15 +49,15 @@ First silently score the target's Social Eminence from the web intelligence abov
     "segment": "B",
     "responseRateEstimate": "8-20%",
     "followerSignal": "medium",
-    "keyInsight": "One sharp sentence about this person's reachability",
+    "keyInsight": "One sharp sentence about reachability",
     "communicationStyle": "data-driven"
   },
   "formatRecommendation": {
     "recommended": "concise",
-    "conciseRationale": "Why short works for this target",
-    "descriptiveRationale": "Why long might not work",
+    "conciseRationale": "Why short works",
+    "descriptiveRationale": "Why long might not",
     "idealWordCount": "40-60 words",
-    "openingStrategy": "Specific opening instruction for this person"
+    "openingStrategy": "How to open for this person"
   },
   "signalAnalysis": {
     "presentSignals": ["signal one"],
@@ -86,7 +79,7 @@ First silently score the target's Social Eminence from the web intelligence abov
   "strategicRules": ["Rule 1", "Rule 2", "Rule 3", "Rule 4"]
 }
 
-Generate exactly 11 scenarios. Cover: best version, ecosystem credibility, ultra-short 2-3 sentences, content hook, curiosity gap, inbound response, peer intelligence, challenge/insight, role adjacency, credibility drop, wildcard. Each unique and immediately sendable. rrColor must be green amber or red. scoreLabel must be Strong / Moderate / Weak / Critical Issues.`;
+Generate exactly 11 scenarios. Cover: best version, ecosystem credibility, ultra-short 2-3 sentences, content hook, curiosity gap, inbound response, peer intelligence, challenge/insight, role adjacency, credibility drop, wildcard. rrColor must be green amber or red. scoreLabel must be Strong / Moderate / Weak / Critical Issues. OUTPUT ONLY THE JSON OBJECT. NO OTHER TEXT.`;
 
     const r = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -105,9 +98,16 @@ Generate exactly 11 scenarios. Cover: best version, ecosystem credibility, ultra
     const data = await r.json();
     if (!r.ok) return res.status(r.status).json({ error: "Anthropic error", details: data });
 
-    const text = (data?.content?.[0]?.text || "").trim();
-    const cleaned = text.replace(/```json|```/g, "").trim();
-    const parsed = JSON.parse(cleaned);
+    const raw = (data?.content?.[0]?.text || "").trim();
+
+    // Extract JSON block robustly — find first { and last }
+    const start = raw.indexOf("{");
+    const end = raw.lastIndexOf("}");
+    if (start === -1 || end === -1) {
+      return res.status(500).json({ error: "No JSON found in response", raw: raw.slice(0, 200) });
+    }
+    const jsonStr = raw.slice(start, end + 1);
+    const parsed = JSON.parse(jsonStr);
 
     // Write to Supabase
     if (process.env.SUPABASE_URL && process.env.SUPABASE_KEY) {
