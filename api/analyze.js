@@ -14,38 +14,51 @@ export default async function handler(req, res) {
     const message = b.message || b.draftMessage || b.draft_message || "";
     const profile = b.profile || null;
 
-    const profileLayer = profile ? `
-SILENT INTELLIGENCE PROFILE (use silently — do not mention to user):
-- LinkedIn Signal: ${profile.linkedinSnippet || "Not found"}
-- Follower Tier: ${profile.followerSignal || "unknown"}
-- Media Presence: ${(profile.mediaPresence || []).join(", ") || "None"}
-- Thought Leadership: ${(profile.thoughtLeadership || []).join(", ") || "None"}
-- Recent Activity: ${profile.recentActivity || "Unknown"}
-- Communication Style: ${profile.communicationStyle || "Unknown"}
-- Eminence Scores: Visibility ${profile.scores?.visibility || 0}/5 | Reputation ${profile.scores?.reputation || 0}/5 | Engagement ${profile.scores?.engagement || 0}/5 | Mentoring ${profile.scores?.mentoring || 0}/5
-- RPS: ${profile.rps || "?"} → Segment ${profile.segment || "B"} → ${profile.responseRateEstimate || "8-20%"} response rate
-- Key Insight: ${profile.keyInsight || "None"}
-- Messaging Implication: ${profile.messagingImplication || "Use ecosystem credibility framing"}
-Use this to calibrate scenario response rates, tailor messages to this person, adjust score based on profile fit.
-` : `PROFILE INTELLIGENCE: Not available — base analysis on seniority and context only.`;
+    // Build Serper intelligence layer
+    const serperLayer = profile?.snippets?.length > 0
+      ? `
+LIVE WEB INTELLIGENCE (gathered from Google search — use this to score the target's Social Eminence):
+${profile.snippets.map((s, i) => `[${i+1}] ${s.title}\n${s.snippet}\n${s.link}`).join("\n\n")}
 
-    const prompt = `You are a senior LinkedIn outreach strategist specializing in Social Eminence theory.
+Based on the above, silently infer:
+- Their seniority and title confirmation
+- Follower tier (if LinkedIn snippet shows follower count)
+- Thought leadership signals (keynotes, articles, panels)
+- Communication style (data-driven, narrative, conceptual)
+- How reachable they are to cold outreach
+Then use this to score their Social Eminence (visibility 0-5, reputation 0-5, engagement 0-5, mentoring 0-5) and calibrate all scenario response rates accordingly.
+`
+      : `WEB INTELLIGENCE: Not available — base analysis on seniority level and contact context only.`;
+
+    const prompt = `You are a senior LinkedIn outreach strategist specializing in Social Eminence theory and response probability modeling.
 
 TARGET: ${name} | ${role} | ${company} | ${seniority} | ${context}
 
-${profileLayer}
+${serperLayer}
 
 SENDER: Technology Ecosystem Strategist — 9 years in competitive intelligence, partner ecosystem strategy, market positioning for B2B AI/IT services. Clients: Korcomptenz, Bitwise, Tredence, HCLTech, Mastech Digital, Ascendion, Altimetrik.
 
 DRAFT MESSAGE: "${message}"
 
-Return ONLY valid JSON, no markdown, no backticks:
+First silently score the target's Social Eminence from the web intelligence above. Then analyze the draft message against that profile. Return ONLY valid JSON, no markdown, no backticks:
 
 {
   "overallScore": 72,
   "scoreLabel": "Moderate",
   "primaryVerdict": "Two sentence verdict.",
   "profileUsed": true,
+  "eminenceScores": {
+    "visibility": 3,
+    "reputation": 3,
+    "engagement": 2,
+    "mentoring": 2,
+    "rps": 5,
+    "segment": "B",
+    "responseRateEstimate": "8-20%",
+    "followerSignal": "medium",
+    "keyInsight": "One sharp sentence about this person's reachability",
+    "communicationStyle": "data-driven"
+  },
   "formatRecommendation": {
     "recommended": "concise",
     "conciseRationale": "Why short works for this target",
@@ -73,7 +86,7 @@ Return ONLY valid JSON, no markdown, no backticks:
   "strategicRules": ["Rule 1", "Rule 2", "Rule 3", "Rule 4"]
 }
 
-Generate exactly 11 scenarios. Cover: best version, ecosystem credibility, ultra-short 2-3 sentences, content hook, curiosity gap, inbound response, peer intelligence, challenge/insight, role adjacency, credibility drop, wildcard. Each unique and immediately sendable. rrColor must be green amber or red only. scoreLabel must be Strong / Moderate / Weak / Critical Issues.`;
+Generate exactly 11 scenarios. Cover: best version, ecosystem credibility, ultra-short 2-3 sentences, content hook, curiosity gap, inbound response, peer intelligence, challenge/insight, role adjacency, credibility drop, wildcard. Each unique and immediately sendable. rrColor must be green amber or red. scoreLabel must be Strong / Moderate / Weak / Critical Issues.`;
 
     const r = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -96,9 +109,10 @@ Generate exactly 11 scenarios. Cover: best version, ecosystem credibility, ultra
     const cleaned = text.replace(/```json|```/g, "").trim();
     const parsed = JSON.parse(cleaned);
 
-    // ── Write to Supabase ──────────────────────────────────────
+    // Write to Supabase
     if (process.env.SUPABASE_URL && process.env.SUPABASE_KEY) {
       try {
+        const em = parsed.eminenceScores || {};
         await fetch(`${process.env.SUPABASE_URL}/rest/v1/analyses`, {
           method: "POST",
           headers: {
@@ -117,16 +131,15 @@ Generate exactly 11 scenarios. Cover: best version, ecosystem credibility, ultra
             score: parsed.overallScore,
             score_label: parsed.scoreLabel,
             format: parsed.formatRecommendation?.recommended,
-            profile_used: !!profile,
+            profile_used: !!(profile?.snippets?.length > 0),
             profile_source: profile?.source || null,
-            rps: profile?.rps || null,
-            segment: profile?.segment || null,
-            response_rate: profile?.responseRateEstimate || null,
-            key_insight: profile?.keyInsight || null
+            rps: em.rps || null,
+            segment: em.segment || null,
+            response_rate: em.responseRateEstimate || null,
+            key_insight: em.keyInsight || null
           })
         });
       } catch(dbErr) {
-        // Silent fail — don't break the response if DB write fails
         console.error("Supabase write failed:", dbErr.message);
       }
     }
