@@ -172,11 +172,11 @@ export default function App() {
             <div className="field-row">
               <div className="field">
                 <div className="flabel">Target Name</div>
-                <input placeholder="e.g. Ashwin Venkatesan" value={form.targetName} onChange={e=>setField("targetName",e.target.value)} />
+                <input placeholder="e.g. Target Full Name" value={form.targetName} onChange={e=>setField("targetName",e.target.value)} />
               </div>
               <div className="field">
                 <div className="flabel">Company</div>
-                <input placeholder="e.g. HFS Research" value={form.targetCompany} onChange={e=>setField("targetCompany",e.target.value)} />
+                <input placeholder="e.g. Company Name" value={form.targetCompany} onChange={e=>setField("targetCompany",e.target.value)} />
               </div>
             </div>
 
@@ -191,7 +191,7 @@ export default function App() {
 
             <div className="field">
               <div className="flabel">Role / Title</div>
-              <input placeholder="e.g. VP Research & Insights" value={form.targetRole} onChange={e=>setField("targetRole",e.target.value)} />
+              <input placeholder="e.g. VP of Marketing" value={form.targetRole} onChange={e=>setField("targetRole",e.target.value)} />
             </div>
 
             <div className="field-row">
