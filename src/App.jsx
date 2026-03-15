@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import "./App.css";
 
-
 const SENIORITY_OPTS = ["Recruiter / TA Lead","Hiring Manager","Director","Senior Director / VP","C-Suite / Partner","Analyst / Researcher","Founder / Operator"];
 const CONTEXT_OPTS = ["Cold outreach — no prior contact","Responding to their inbound","Following up on a post/article they wrote","Referral / mutual connection","Reconnecting after an event"];
 
@@ -38,6 +37,181 @@ function normalizeResult(data) {
   };
 }
 
+// ── N-GRAM WORD CLOUD ─────────────────────────────────────────────────────────
+function NgramCloud({ items, maxCount }) {
+  if (!items || items.length === 0) return <div style={{color:"var(--text-3)",fontSize:12,padding:"20px 0",textAlign:"center"}}>Not enough data yet</div>;
+  return (
+    <div style={{display:"flex",flexWrap:"wrap",gap:8,padding:"4px 0"}}>
+      {items.slice(0,25).map((item, i) => {
+        const size = 11 + Math.round((item.count / maxCount) * 10);
+        const score = item.avgScore || 50;
+        const heat = score >= 70 ? "#f59e0b" : score >= 50 ? "#94a3b8" : "#475569";
+        const bg = score >= 70 ? "rgba(245,158,11,0.1)" : "rgba(255,255,255,0.04)";
+        return (
+          <span key={i} style={{
+            fontSize: size,
+            color: heat,
+            background: bg,
+            border: `1px solid ${score >= 70 ? "rgba(245,158,11,0.2)" : "rgba(255,255,255,0.08)"}`,
+            borderRadius: 20,
+            padding: "3px 10px",
+            fontWeight: score >= 70 ? 600 : 400,
+            transition: "all 0.2s",
+            cursor: "default",
+            fontFamily: "var(--font-main)"
+          }}>
+            {item.gram}
+            <span style={{fontSize:9,color:"var(--text-3)",marginLeft:4,fontFamily:"var(--font-mono)"}}>{item.count}</span>
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── SENIORITY HEATMAP ─────────────────────────────────────────────────────────
+function SeniorityHeatmap({ seniorityMap, total }) {
+  const entries = Object.entries(seniorityMap).sort((a,b) => b[1]-a[1]);
+  const max = Math.max(...entries.map(([,v]) => v));
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:6}}>
+      {entries.map(([label, count], i) => {
+        const pct = Math.round((count/total)*100);
+        const intensity = count/max;
+        return (
+          <div key={i} style={{display:"flex",alignItems:"center",gap:10}}>
+            <div style={{fontSize:11,color:"var(--text-2)",width:160,flexShrink:0,fontFamily:"var(--font-main)"}}>{label.split(" /")[0]}</div>
+            <div style={{flex:1,height:6,background:"rgba(255,255,255,0.06)",borderRadius:3,overflow:"hidden"}}>
+              <div style={{
+                height:"100%",
+                width:`${pct}%`,
+                background:`rgba(245,158,11,${0.2 + intensity*0.8})`,
+                borderRadius:3,
+                transition:"width 0.8s ease"
+              }}/>
+            </div>
+            <div style={{fontFamily:"var(--font-mono)",fontSize:10,color:"var(--text-3)",width:30,textAlign:"right"}}>{count}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── INSIGHTS PANEL ────────────────────────────────────────────────────────────
+function InsightsPanel({ insights, compact }) {
+  const [ngramTab, setNgramTab] = useState("bigrams");
+  if (!insights || insights.empty) {
+    return (
+      <div style={{textAlign:"center",padding:"40px 20px",color:"var(--text-3)"}}>
+        <div style={{fontFamily:"var(--font-mono)",fontSize:10,letterSpacing:".12em",marginBottom:8}}>NO DATA YET</div>
+        <div style={{fontSize:12}}>Community intelligence builds as more messages are analyzed.</div>
+      </div>
+    );
+  }
+
+  const currentGrams = insights[ngramTab] || [];
+  const maxCount = Math.max(...currentGrams.map(g => g.count), 1);
+
+  const card = {background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding: compact ? "14px" : "18px",marginBottom:12};
+  const sectionLabel = {fontFamily:"var(--font-mono)",fontSize:9,letterSpacing:".16em",color:"var(--text-3)",textTransform:"uppercase",marginBottom:compact?8:12};
+
+  return (
+    <div>
+      {/* Header stats */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12}}>
+        {[
+          {val:insights.total,lbl:"Analyses",col:"var(--amber)"},
+          {val:insights.avgScore||"—",lbl:"Avg Score",col:insights.avgScore>=60?"var(--green)":"var(--red)"},
+          {val:insights.recentCount||0,lbl:"This Week",col:"var(--blue)"},
+        ].map((k,i)=>(
+          <div key={i} style={{...card,marginBottom:0,textAlign:"center",padding:"12px 8px"}}>
+            <div style={{fontFamily:"var(--font-mono)",fontSize:compact?18:22,fontWeight:600,color:k.col,lineHeight:1}}>{k.val}</div>
+            <div style={{fontSize:10,color:"var(--text-3)",marginTop:4,textTransform:"uppercase",letterSpacing:".06em"}}>{k.lbl}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Seniority heatmap */}
+      <div style={card}>
+        <div style={sectionLabel}>Targeting patterns</div>
+        <SeniorityHeatmap seniorityMap={insights.seniorityMap} total={insights.total}/>
+      </div>
+
+      {/* Score distribution */}
+      <div style={card}>
+        <div style={sectionLabel}>Message quality distribution</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+          {[
+            {label:"Strong",val:insights.scoreBuckets?.strong||0,col:"var(--green)"},
+            {label:"Moderate",val:insights.scoreBuckets?.moderate||0,col:"var(--amber)"},
+            {label:"Weak",val:insights.scoreBuckets?.weak||0,col:"var(--red)"},
+            {label:"Critical",val:insights.scoreBuckets?.critical||0,col:"rgba(244,63,94,0.5)"},
+          ].map((item,i)=>(
+            <div key={i} style={{background:"rgba(0,0,0,0.2)",borderRadius:6,padding:"8px 10px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{fontSize:11,color:"var(--text-2)"}}>{item.label}</span>
+              <span style={{fontFamily:"var(--font-mono)",fontSize:13,fontWeight:600,color:item.col}}>{item.val}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* N-gram panel */}
+      <div style={card}>
+        <div style={sectionLabel}>Message intelligence · resonance heatmap</div>
+        <div style={{display:"flex",gap:4,marginBottom:12,background:"rgba(0,0,0,0.2)",borderRadius:6,padding:3}}>
+          {["unigrams","bigrams","trigrams"].map(t=>(
+            <button key={t} onClick={()=>setNgramTab(t)} style={{
+              flex:1,padding:"6px 4px",borderRadius:4,border:"none",
+              background:ngramTab===t?"rgba(255,255,255,0.1)":"transparent",
+              color:ngramTab===t?"var(--text)":"var(--text-3)",
+              fontSize:11,fontFamily:"var(--font-main)",fontWeight:600,
+              cursor:"pointer",letterSpacing:".04em",textTransform:"capitalize",
+              transition:"all .2s"
+            }}>{t}</button>
+          ))}
+        </div>
+        <NgramCloud items={currentGrams} maxCount={maxCount}/>
+        <div style={{marginTop:10,display:"flex",gap:12,alignItems:"center"}}>
+          <div style={{display:"flex",alignItems:"center",gap:5}}>
+            <div style={{width:8,height:8,borderRadius:2,background:"rgba(245,158,11,0.5)"}}/>
+            <span style={{fontSize:10,color:"var(--text-3)"}}>High scoring</span>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:5}}>
+            <div style={{width:8,height:8,borderRadius:2,background:"rgba(255,255,255,0.15)"}}/>
+            <span style={{fontSize:10,color:"var(--text-3)"}}>Neutral</span>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:5}}>
+            <div style={{width:8,height:8,borderRadius:2,background:"rgba(71,85,105,0.5)"}}/>
+            <span style={{fontSize:10,color:"var(--text-3)"}}>Low scoring</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Format split */}
+      <div style={card}>
+        <div style={sectionLabel}>Recommended format split</div>
+        <div style={{display:"flex",gap:10}}>
+          {[
+            {label:"Concise",val:insights.formatMap?.concise||0,col:"var(--amber)"},
+            {label:"Descriptive",val:insights.formatMap?.descriptive||0,col:"var(--blue)"},
+          ].map((item,i)=>{
+            const total = (insights.formatMap?.concise||0)+(insights.formatMap?.descriptive||0);
+            const pct = total ? Math.round((item.val/total)*100) : 0;
+            return (
+              <div key={i} style={{flex:1,background:"rgba(0,0,0,0.2)",borderRadius:6,padding:"10px 12px",textAlign:"center"}}>
+                <div style={{fontFamily:"var(--font-mono)",fontSize:20,fontWeight:600,color:item.col}}>{pct}%</div>
+                <div style={{fontSize:10,color:"var(--text-3)",marginTop:3}}>{item.label}</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── MAIN ──────────────────────────────────────────────────────────────────────
 export default function App() {
   const [tab, setTab] = useState("analyze");
   const [form, setForm] = useState({ targetName:"", targetRole:"", targetCompany:"", seniority:"Hiring Manager", context:"Cold outreach — no prior contact", message:"" });
@@ -49,6 +223,8 @@ export default function App() {
   const [loadingStep, setLoadingStep] = useState("Analyzing profile signals...");
   const [profile, setProfile] = useState(null);
   const [profileStatus, setProfileStatus] = useState("idle");
+  const [insights, setInsights] = useState(null);
+  const [insightsLoading, setInsightsLoading] = useState(false);
   const profileDebounce = useRef(null);
   const stepRef = useRef(null);
   const loadingSteps = ["Analyzing profile signals...","Scoring message structure...","Modeling response probability...","Generating 11 scenarios...","Building strategic rules..."];
@@ -60,7 +236,18 @@ export default function App() {
         if (stored) setHistory(JSON.parse(stored.value));
       } catch(e) {}
     })();
+    fetchInsights();
   }, []);
+
+  async function fetchInsights() {
+    setInsightsLoading(true);
+    try {
+      const r = await fetch("/api/insights");
+      const data = await r.json();
+      setInsights(data);
+    } catch(e) {}
+    setInsightsLoading(false);
+  }
 
   useEffect(() => {
     clearTimeout(profileDebounce.current);
@@ -76,7 +263,7 @@ export default function App() {
           body: JSON.stringify({ name: form.targetName, company: form.targetCompany, role: form.targetRole })
         });
         const data = await r.json();
-        if (data && data.scores) { setProfile(data); setProfileStatus("ready"); }
+        if (data && data.found !== undefined) { setProfile(data); setProfileStatus(data.found ? "ready" : "failed"); }
         else setProfileStatus("failed");
       } catch(e) { setProfileStatus("failed"); }
     }, 3000);
@@ -95,6 +282,8 @@ export default function App() {
   async function analyze() {
     if (!form.message.trim() || !form.targetName.trim()) return;
     setLoading(true); setResult(null); setError(null); setExpanded(null);
+    // Fetch fresh insights while analyzing
+    fetchInsights();
     let si = 0;
     stepRef.current = setInterval(() => { si=(si+1)%loadingSteps.length; setLoadingStep(loadingSteps[si]); }, 900);
     try {
@@ -123,6 +312,8 @@ export default function App() {
         format: parsed.formatRecommendation?.recommended,
         wordCount: wc, profileUsed: !!profile
       });
+      // Refresh insights after analysis completes
+      fetchInsights();
       setTab("result");
     } catch(e) {
       clearInterval(stepRef.current);
@@ -139,20 +330,18 @@ export default function App() {
 
   const totalAnalyzed = history.length;
   const avgScore = history.length ? Math.round(history.reduce((a,b)=>a+b.score,0)/history.length) : 0;
-  const conciseCount = history.filter(h=>h.format==="concise").length;
-  const descriptiveCount = history.filter(h=>h.format==="descriptive").length;
 
   const profileIndicator = {
     idle: null,
-    loading: { text: "Scanning profile intelligence...", color: "var(--muted)" },
-    ready: { text: `◈ Intelligence ready · RPS ${profile?.rps || "—"} · Segment ${profile?.segment || "—"} · ${profile?.responseRateEstimate || "—"} est. response`, color: "var(--green)" },
-    failed: { text: "Profile scan incomplete — will analyze from form inputs", color: "var(--amber)" }
+    loading: { text: "Scanning profile...", color: "var(--text-3)" },
+    ready: { text: `◈ Profile scan complete · ${profile?.snippets?.length || 0} signals found`, color: "var(--green)" },
+    failed: { text: "Profile scan incomplete — analyzing from form inputs", color: "var(--amber)" }
   }[profileStatus];
 
   return (
     <>
-      
-<div className="app">
+      <div className="gradient-canvas"/>
+      <div className="app">
         <div className="hd">
           <div className="brand">
             <div className="brand-logo">MI</div>
@@ -160,34 +349,34 @@ export default function App() {
           </div>
           <div className="hd-pre">Message Intelligence Engine</div>
           <div className="hd-title">Should you write <span>2 lines</span><br/>or 2 paragraphs?</div>
-          <div className="hd-sub">Paste your draft. Get 11 scenarios, a format verdict, and response probability scoring — all calibrated to your target's Social Eminence profile.</div>
+          <div className="hd-sub">Paste your draft. Get 11 scenarios, a format verdict, and response probability scoring — calibrated to your target's Social Eminence profile.</div>
         </div>
 
         <div className="tabs">
           <button className={`tab ${tab==="analyze"?"on":""}`} onClick={()=>setTab("analyze")}>Analyze</button>
           <button className={`tab ${tab==="result"?"on":""}`} onClick={()=>setTab("result")} disabled={!result}>Results</button>
-          <button className={`tab ${tab==="intel"?"on":""}`} onClick={()=>setTab("intel")}>Data Model</button>
+          <button className={`tab ${tab==="intel"?"on":""}`} onClick={()=>setTab("intel")}>My Data</button>
+          <button className={`tab ${tab==="community"?"on":""}`} onClick={()=>{setTab("community");fetchInsights();}}>Intelligence</button>
         </div>
 
-        {tab==="analyze" && (
+        {/* ── ANALYZE TAB ── */}
+        {tab==="analyze" && !loading && (
           <div className="fade-in">
             <div className="field-row">
               <div className="field">
                 <div className="flabel">Target Name</div>
-                <input placeholder="e.g. Target Full Name" value={form.targetName} onChange={e=>setField("targetName",e.target.value)} />
+                <input placeholder="Full name" value={form.targetName} onChange={e=>setField("targetName",e.target.value)} />
               </div>
               <div className="field">
                 <div className="flabel">Company</div>
-                <input placeholder="e.g. Company Name" value={form.targetCompany} onChange={e=>setField("targetCompany",e.target.value)} />
+                <input placeholder="Company name" value={form.targetCompany} onChange={e=>setField("targetCompany",e.target.value)} />
               </div>
             </div>
 
             {profileIndicator && (
-              <div style={{marginTop:-4,marginBottom:12,padding:"7px 12px",borderRadius:6,background:"rgba(0,0,0,.25)",border:`1px solid ${profileIndicator.color}25`,display:"flex",alignItems:"center",gap:8}}>
-                {profileStatus==="loading" && (
-                  <div style={{width:8,height:8,borderRadius:"50%",border:"1.5px solid var(--muted)",borderTopColor:"var(--amber)",animation:"spin 0.7s linear infinite",flexShrink:0}}/>
-                )}
-                <span style={{fontFamily:"IBM Plex Mono",fontSize:10,color:profileIndicator.color,letterSpacing:".08em"}}>{profileIndicator.text}</span>
+              <div style={{marginTop:-4,marginBottom:12,padding:"7px 12px",borderRadius:6,background:"rgba(0,0,0,0.25)",border:`1px solid ${profileIndicator.color}25`,display:"flex",alignItems:"center",gap:8}}>
+                {profileStatus==="loading" && <div style={{width:7,height:7,borderRadius:"50%",border:"1.5px solid var(--text-3)",borderTopColor:"var(--amber)",animation:"spin 0.7s linear infinite",flexShrink:0}}/>}
+                <span style={{fontFamily:"var(--font-mono)",fontSize:10,color:profileIndicator.color,letterSpacing:".08em"}}>{profileIndicator.text}</span>
               </div>
             )}
 
@@ -216,45 +405,80 @@ export default function App() {
                 <span>Your Draft Message</span>
                 <span className={`fcount ${wcColor}`}>{wc}/150 words</span>
               </div>
-              <textarea placeholder="Paste your message here. Write it exactly as you would send it — the model needs your real draft to give accurate feedback." value={form.message} onChange={e=>setField("message",e.target.value)} rows={7}/>
+              <textarea placeholder="Paste your message here. Write it exactly as you would send it." value={form.message} onChange={e=>setField("message",e.target.value)} rows={7}/>
             </div>
 
             <button className="analyze-btn" onClick={analyze} disabled={loading || !form.message.trim() || !form.targetName.trim()}>
-              {loading ? loadingStep : profileStatus==="ready" ? "▶ Analyze with Profile Intelligence" : "▶ Analyze Message + Generate Scenarios"}
+              {profileStatus==="ready" ? "▶ Analyze with Profile Intelligence" : "▶ Analyze Message + Generate Scenarios"}
             </button>
 
-            {loading && (
-              <div className="loading fade-in" style={{marginTop:20}}>
-                <div className="loading-text">{loadingStep}</div>
-                <div className="loading-bar"><div className="loading-fill"/></div>
-              </div>
-            )}
             {error && <div style={{marginTop:14,padding:"12px 14px",background:"rgba(244,63,94,.08)",border:"1px solid rgba(244,63,94,.25)",borderRadius:8,fontSize:12,color:"var(--red)"}}>{error}</div>}
           </div>
         )}
 
+        {/* ── SPLIT LOADING STATE ── */}
+        {loading && (
+          <div className="fade-in" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,alignItems:"start"}}>
+            {/* Left — progress */}
+            <div style={{paddingTop:20}}>
+              <div style={{fontFamily:"var(--font-mono)",fontSize:10,color:"var(--text-3)",letterSpacing:".12em",textTransform:"uppercase",marginBottom:20}}>Processing</div>
+              {loadingSteps.map((step,i)=>{
+                const current = loadingSteps.indexOf(loadingStep);
+                const done = i < current;
+                const active = i === current;
+                return (
+                  <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
+                    <div style={{
+                      width:18,height:18,borderRadius:"50%",flexShrink:0,
+                      background:done?"var(--green)":active?"var(--amber)":"transparent",
+                      border:`1px solid ${done?"var(--green)":active?"var(--amber)":"rgba(255,255,255,0.12)"}`,
+                      display:"flex",alignItems:"center",justifyContent:"center",
+                      fontSize:9,color:"#08090d",fontWeight:700
+                    }}>
+                      {done?"✓":active?<div style={{width:6,height:6,borderRadius:"50%",background:"#08090d"}}/>:""}
+                    </div>
+                    <span style={{fontSize:12,color:active?"var(--text)":done?"var(--text-2)":"var(--text-3)",fontWeight:active?600:400}}>{step}</span>
+                  </div>
+                );
+              })}
+              <div style={{marginTop:20,height:1,background:"var(--border)",overflow:"hidden",borderRadius:1}}>
+                <div className="loading-fill"/>
+              </div>
+            </div>
+
+            {/* Right — live intelligence preview */}
+            <div>
+              <div style={{fontFamily:"var(--font-mono)",fontSize:10,color:"var(--amber)",letterSpacing:".12em",textTransform:"uppercase",marginBottom:16}}>◈ Live Community Intelligence</div>
+              {insightsLoading && !insights ? (
+                <div style={{color:"var(--text-3)",fontSize:12,textAlign:"center",padding:20}}>Loading intelligence...</div>
+              ) : (
+                <InsightsPanel insights={insights} compact={true}/>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── RESULTS TAB ── */}
         {tab==="result" && result && (
           <div className="fade-in">
-
-            {profile && (
+            {profile && profile.found && (
               <div style={{background:"rgba(16,185,129,.04)",border:"1px solid rgba(16,185,129,.18)",borderRadius:10,padding:"14px 16px",marginBottom:14}}>
-                <div style={{fontFamily:"IBM Plex Mono",fontSize:9,color:"var(--green)",letterSpacing:".16em",textTransform:"uppercase",marginBottom:10}}>◈ Social Eminence Profile Used</div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
+                <div style={{fontFamily:"var(--font-mono)",fontSize:9,color:"var(--green)",letterSpacing:".16em",textTransform:"uppercase",marginBottom:10}}>◈ Profile Intelligence Used</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
                   {[
-                    ["RPS Score", profile.rps, "var(--amber)"],
-                    ["Segment", profile.segment, profile.segment==="A"?"var(--green)":profile.segment==="B"?"var(--amber)":"var(--red)"],
-                    ["Est. Response Rate", profile.responseRateEstimate, "var(--text)"],
-                    ["Follower Tier", profile.followerSignal, "var(--text)"]
+                    ["RPS Score",result.eminenceScores?.rps,"var(--amber)"],
+                    ["Segment",result.eminenceScores?.segment,result.eminenceScores?.segment==="A"?"var(--green)":result.eminenceScores?.segment==="B"?"var(--amber)":"var(--red)"],
+                    ["Est. Response",result.eminenceScores?.responseRateEstimate,"var(--text)"],
+                    ["Follower Tier",result.eminenceScores?.followerSignal,"var(--text)"],
                   ].map(([l,v,c],i)=>(
                     <div key={i} style={{background:"rgba(0,0,0,.3)",borderRadius:6,padding:"8px 10px"}}>
-                      <div style={{fontSize:10,color:"var(--muted)",marginBottom:2}}>{l}</div>
-                      <div style={{fontFamily:"IBM Plex Mono",fontSize:13,fontWeight:600,color:c}}>{v||"—"}</div>
+                      <div style={{fontSize:10,color:"var(--text-3)",marginBottom:2}}>{l}</div>
+                      <div style={{fontFamily:"var(--font-mono)",fontSize:13,fontWeight:600,color:c}}>{v||"—"}</div>
                     </div>
                   ))}
                 </div>
-                {profile.keyInsight && <div style={{fontSize:12,color:"#94a3b8",lineHeight:1.65,borderTop:"1px solid rgba(16,185,129,.12)",paddingTop:10}}><strong style={{color:"var(--green)"}}>Key insight:</strong> {profile.keyInsight}</div>}
-                {profile.messagingImplication && <div style={{fontSize:12,color:"#94a3b8",lineHeight:1.65,marginTop:6}}><strong style={{color:"var(--amber)"}}>Messaging implication:</strong> {profile.messagingImplication}</div>}
-                {profile.communicationStyle && <div style={{fontSize:12,color:"#94a3b8",lineHeight:1.65,marginTop:6}}><strong style={{color:"var(--blue)"}}>Communication style:</strong> {profile.communicationStyle}</div>}
+                {result.eminenceScores?.keyInsight && <div style={{fontSize:12,color:"#94a3b8",lineHeight:1.65,borderTop:"1px solid rgba(16,185,129,.12)",paddingTop:8}}><strong style={{color:"var(--green)"}}>Key insight:</strong> {result.eminenceScores.keyInsight}</div>}
+                {result.eminenceScores?.communicationStyle && <div style={{fontSize:12,color:"#94a3b8",lineHeight:1.65,marginTop:4}}><strong style={{color:"var(--blue)"}}>Style:</strong> {result.eminenceScores.communicationStyle}</div>}
               </div>
             )}
 
@@ -335,25 +559,26 @@ export default function App() {
           </div>
         )}
 
+        {/* ── MY DATA TAB ── */}
         {tab==="intel" && (
           <div className="fade-in">
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:14}}>
               {[
                 {val:totalAnalyzed,lbl:"Analyses Run",col:"var(--amber)"},
                 {val:avgScore||"—",lbl:"Avg Score",col:avgScore>=60?"var(--green)":"var(--red)"},
-                {val:`${conciseCount}:${descriptiveCount}`,lbl:"Short:Long",col:"var(--blue)"},
+                {val:history.filter(h=>h.profileUsed).length,lbl:"With AI Profile",col:"var(--blue)"},
               ].map((k,i)=>(
-                <div key={i} style={{background:"var(--surface)",border:"1px solid var(--border2)",borderRadius:10,padding:"12px 10px",textAlign:"center"}}>
-                  <div style={{fontFamily:"IBM Plex Mono",fontSize:22,fontWeight:600,color:k.col,lineHeight:1}}>{k.val}</div>
-                  <div style={{fontSize:10,color:"var(--muted)",marginTop:4,textTransform:"uppercase",letterSpacing:".06em"}}>{k.lbl}</div>
+                <div key={i} style={{background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"12px 10px",textAlign:"center"}}>
+                  <div style={{fontFamily:"var(--font-mono)",fontSize:22,fontWeight:600,color:k.col,lineHeight:1}}>{k.val}</div>
+                  <div style={{fontSize:10,color:"var(--text-3)",marginTop:4,textTransform:"uppercase",letterSpacing:".06em"}}>{k.lbl}</div>
                 </div>
               ))}
             </div>
 
             {history.length === 0 ? (
-              <div style={{textAlign:"center",padding:"40px 0",color:"var(--muted)"}}>
-                <div style={{fontFamily:"IBM Plex Mono",fontSize:11,letterSpacing:".12em",marginBottom:8}}>NO DATA YET</div>
-                <div style={{fontSize:12}}>Run your first analysis to start building the model.</div>
+              <div style={{textAlign:"center",padding:"40px 0",color:"var(--text-3)"}}>
+                <div style={{fontFamily:"var(--font-mono)",fontSize:11,letterSpacing:".12em",marginBottom:8}}>NO DATA YET</div>
+                <div style={{fontSize:12}}>Run your first analysis to start building your personal model.</div>
               </div>
             ) : (
               <>
@@ -369,29 +594,33 @@ export default function App() {
                     <div key={i} className="intel-row">
                       <div><div className="ir-name">{h.targetName}</div><div className="ir-role">{h.targetCompany} · {h.seniority?.split(" ")[0]}</div></div>
                       <div className="ir-score" style={{color:scoreColor(h.score)}}>{h.score}</div>
-                      <div className="ir-format" style={{color:"var(--muted)",fontSize:10}}>{h.format==="concise"?"Short":"Full"}</div>
-                      <div style={{fontFamily:"IBM Plex Mono",fontSize:10,color:h.profileUsed?"var(--green)":"var(--dim)"}}>{h.profileUsed?"◈ AI":"—"}</div>
+                      <div style={{color:"var(--text-3)",fontSize:10,fontFamily:"var(--font-mono)"}}>{h.format==="concise"?"Short":"Full"}</div>
+                      <div style={{fontFamily:"var(--font-mono)",fontSize:10,color:h.profileUsed?"var(--green)":"var(--text-3)"}}>{h.profileUsed?"◈":"—"}</div>
                     </div>
                   ))}
                 </div>
-
-                {history.length >= 3 && (
-                  <div className="insight-panel">
-                    <div className="ip-title">▸ Emerging patterns · {history.length} data points</div>
-                    {[
-                      avgScore < 50 ? "⚠ Average quality below 50 — ecosystem credibility signals missing" : "✓ Message quality trending above threshold",
-                      conciseCount > descriptiveCount ? `Short format recommended in ${conciseCount}/${history.length} cases` : `Full messages recommended more often`,
-                      history.filter(h=>h.score<40).length > 0 ? `${history.filter(h=>h.score<40).length} messages flagged critical` : "No critical-score messages in history",
-                      `Profile intelligence used in ${history.filter(h=>h.profileUsed).length}/${history.length} analyses`,
-                    ].map((l,i)=><div key={i} className="ip-line">{l}</div>)}
-                  </div>
-                )}
-
-                <button style={{width:"100%",marginTop:12,padding:"10px",borderRadius:8,border:"1px solid var(--border2)",background:"transparent",color:"var(--red)",fontSize:11,fontFamily:"IBM Plex Mono",letterSpacing:".08em",cursor:"pointer",textTransform:"uppercase"}}
+                <button style={{width:"100%",marginTop:12,padding:"10px",borderRadius:8,border:"1px solid rgba(255,255,255,0.08)",background:"transparent",color:"var(--red)",fontSize:11,fontFamily:"var(--font-mono)",letterSpacing:".08em",cursor:"pointer",textTransform:"uppercase"}}
                   onClick={async()=>{setHistory([]);try{await window.storage.delete("outreach_history");}catch(e){}}}>
-                  Clear Model Data
+                  Clear My Data
                 </button>
               </>
+            )}
+          </div>
+        )}
+
+        {/* ── COMMUNITY INTELLIGENCE TAB ── */}
+        {tab==="community" && (
+          <div className="fade-in">
+            <div style={{fontFamily:"var(--font-mono)",fontSize:9,color:"var(--amber)",letterSpacing:".18em",textTransform:"uppercase",marginBottom:16}}>
+              ◈ Anonymized · Patterns only · No identifiable data
+            </div>
+            {insightsLoading ? (
+              <div style={{textAlign:"center",padding:40,color:"var(--text-3)"}}>
+                <div className="loading-bar" style={{margin:"0 auto",maxWidth:200}}><div className="loading-fill"/></div>
+                <div style={{fontSize:12,marginTop:12,fontFamily:"var(--font-mono)"}}>Loading intelligence...</div>
+              </div>
+            ) : (
+              <InsightsPanel insights={insights} compact={false}/>
             )}
           </div>
         )}
