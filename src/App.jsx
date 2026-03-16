@@ -521,6 +521,12 @@ export default function App() {
                 </div>
                 <div style={{padding:"10px 12px",background:"rgba(0,0,0,.3)",borderRadius:8,fontSize:12,color:"#94a3b8",lineHeight:1.65,borderLeft:"2px solid var(--amber)"}}>
                   <strong style={{color:"var(--amber)"}}>Opening strategy:</strong> {result.formatRecommendation.openingStrategy}
+{result.formatRecommendation.whyFormat && (
+  <div style={{marginTop:10,padding:'11px 14px',background:'rgba(245,158,11,.04)',border:'1px solid rgba(245,158,11,.12)',borderRadius:8}}>
+    <div style={{fontFamily:'var(--font-mono)',fontSize:9,color:'var(--amber)',letterSpacing:'.12em',textTransform:'uppercase',marginBottom:5}}>▸ Why this format for {form.targetName||'this profile'}</div>
+    <div style={{fontSize:12,color:'#94a3b8',lineHeight:1.65}}>{result.formatRecommendation.whyFormat}</div>
+  </div>
+)}
                 </div>
               </div>
             )}
