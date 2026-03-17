@@ -147,6 +147,7 @@ Generate exactly 11 scenarios. Cover: best version, ecosystem credibility, ultra
             format: parsed.formatRecommendation?.recommended,
             profile_used: !!(profile?.snippets?.length > 0),
             profile_source: profile?.source || null,
+            data_source: "real",
             rps: em.rps || null,
             segment: em.segment || null,
             response_rate: em.responseRateEstimate || null,
