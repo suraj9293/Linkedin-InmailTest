@@ -15,17 +15,13 @@ export default async function handler(req, res) {
     const profile = b.profile || null;
 
     const serperLayer = profile?.snippets?.length > 0
-      ? `
-LIVE WEB INTELLIGENCE (from Google search — use to score target Social Eminence silently):
-${profile.snippets.map((s, i) => `[${i+1}] ${s.title}\n${s.snippet}`).join("\n\n")}
-Infer: seniority confirmation, follower tier, thought leadership, communication style, reachability.
-Score visibility/reputation/engagement/mentoring 0-5 each and calibrate scenario response rates.
-`
-      : `WEB INTELLIGENCE: Not available — base analysis on seniority and context only.`;
+      ? `LIVE WEB INTELLIGENCE (use to calibrate silently):
+${profile.snippets.map((s, i) => `[${i+1}] ${s.title}\n${s.snippet}`).join("\n\n")}`
+      : `WEB INTELLIGENCE: Not available — use seniority and context only.`;
 
-    const prompt = `You are a senior LinkedIn outreach strategist specializing in Social Eminence theory.
+    const prompt = `You are a senior LinkedIn outreach strategist. Analyze this message and generate exactly 11 scenarios.
 
-TARGET: ${name} | ${role} | ${company} | ${seniority} | ${context}
+TARGET: ${name || "Unknown"} | ${role || "Unknown"} | ${company || "Unknown"} | ${seniority || "Unknown"} | ${context || "Cold outreach"}
 
 ${serperLayer}
 
@@ -33,28 +29,22 @@ SENDER: Technology Ecosystem Strategist — 9 years in competitive intelligence,
 
 DRAFT MESSAGE: "${message}"
 
-FORMAT DECISION RULES — apply these strictly before making a format recommendation:
-- Cold outreach to Director / Senior Director / VP / C-Suite → ALWAYS concise (2 sentences max)
-- Cold outreach to Hiring Manager or Recruiter → concise by default, descriptive only if role is highly specific
-- Responding to their inbound → descriptive (they already signalled interest, more context closes faster)
-- Referral / mutual connection → descriptive (context about the connection builds trust)
-- Following up on a post/article → concise (lead with their insight, one sentence on your relevance)
-- Reconnecting after an event → concise or descriptive depending on depth of prior interaction
-- Founder / Operator target → concise (they value directness above all)
-- If message contains named firm ecosystem signals → concise works even better (signal density replaces length)
+FORMAT DECISION RULES:
+- Cold outreach to Director / VP / C-Suite / Founder → concise (2 sentences max)
+- Cold outreach to Hiring Manager or Recruiter → concise by default
+- Responding to their inbound → descriptive
+- Referral / mutual connection → descriptive
+- Following up on a post/article → concise
+- Founder / Operator target → concise
 
-RATIONALE RULES — the conciseRationale and descriptiveRationale must be specific to THIS person:
-- Reference their actual seniority, company, and contact context
-- Reference their communication style if inferred from web intelligence
-- Reference their inbound volume or visibility tier if known
-- Never write generic rationale — every sentence must be about this specific profile
+IMPORTANT: Always generate real, usable scenarios. Never return PLACEHOLDER or BLOCKED. Use available information — even partial data is enough to generate calibrated outreach. If some profile data is missing, make reasonable inferences from seniority and context.
 
-Return ONLY valid JSON, no markdown, no backticks. OUTPUT ONLY THE JSON OBJECT. NO OTHER TEXT:
+Return ONLY valid JSON, no markdown, no backticks, nothing after the closing brace:
 
 {
-  "overallScore": 72,
+  "overallScore": 45,
   "scoreLabel": "Moderate",
-  "primaryVerdict": "Two sentence verdict.",
+  "primaryVerdict": "Two sentence verdict here.",
   "profileUsed": true,
   "eminenceScores": {
     "visibility": 3,
@@ -65,16 +55,16 @@ Return ONLY valid JSON, no markdown, no backticks. OUTPUT ONLY THE JSON OBJECT. 
     "segment": "B",
     "responseRateEstimate": "8-20%",
     "followerSignal": "medium",
-    "keyInsight": "One sharp sentence about reachability",
+    "keyInsight": "One sharp sentence about reachability.",
     "communicationStyle": "data-driven"
   },
   "formatRecommendation": {
     "recommended": "concise",
-    "conciseRationale": "Specific reason concise works FOR THIS PERSON based on their seniority, context, and style",
-    "descriptiveRationale": "Specific reason full message does NOT work for this person and context",
+    "conciseRationale": "Specific reason for this person.",
+    "descriptiveRationale": "Why longer would not work here.",
     "idealWordCount": "35-50 words",
-    "openingStrategy": "Specific opening instruction referencing this person's domain and style",
-    "whyFormat": "2-3 sentence explanation tied directly to this profile's eminence score, seniority, contact context, and communication style — not generic theory"
+    "openingStrategy": "Specific opening instruction for this person.",
+    "whyFormat": "2-3 sentences tied to this profile specifically."
   },
   "signalAnalysis": {
     "presentSignals": ["signal one"],
@@ -89,14 +79,14 @@ Return ONLY valid JSON, no markdown, no backticks. OUTPUT ONLY THE JSON OBJECT. 
       "targetContext": "Who this works for",
       "estimatedResponseRate": "25-35%",
       "rrColor": "green",
-      "message": "Full ready-to-send message here",
+      "message": "Full ready-to-send message here.",
       "signals": ["signal1", "signal2"]
     }
   ],
   "strategicRules": ["Rule 1", "Rule 2", "Rule 3", "Rule 4"]
 }
 
-Generate exactly 11 scenarios. Cover: best version, ecosystem credibility, ultra-short 2-3 sentences, content hook, curiosity gap, inbound response, peer intelligence, challenge/insight, role adjacency, credibility drop, wildcard. Each unique and immediately sendable. rrColor must be green amber or red. scoreLabel must be Strong / Moderate / Weak / Critical Issues.`;
+Generate exactly 11 scenarios covering: best version, ecosystem credibility, ultra-short 2-3 sentences, content hook, curiosity gap, inbound response, peer intelligence, challenge/insight, role adjacency, credibility drop, wildcard. Each must be unique and immediately sendable. rrColor must be green amber or red. scoreLabel must be Strong / Moderate / Weak / Critical Issues.`;
 
     const r = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -123,7 +113,6 @@ Generate exactly 11 scenarios. Cover: best version, ecosystem credibility, ultra
     }
     const parsed = JSON.parse(raw.slice(start, end + 1));
 
-    // Write to Supabase
     if (process.env.SUPABASE_URL && process.env.SUPABASE_KEY) {
       try {
         const em = parsed.eminenceScores || {};
