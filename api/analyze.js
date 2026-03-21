@@ -37,7 +37,7 @@ FORMAT DECISION RULES:
 - Following up on a post/article → concise
 - Founder / Operator target → concise
 
-IMPORTANT: Always generate real, usable scenarios. Never return PLACEHOLDER or BLOCKED. Use available information — even partial data is enough to generate calibrated outreach. If some profile data is missing, make reasonable inferences from seniority and context.
+IMPORTANT: Always generate real, usable scenarios. Never return PLACEHOLDER or BLOCKED. Use available information — even partial data is enough. If profile data is missing, infer from seniority and context.
 
 Return ONLY valid JSON, no markdown, no backticks, nothing after the closing brace:
 
@@ -86,7 +86,7 @@ Return ONLY valid JSON, no markdown, no backticks, nothing after the closing bra
   "strategicRules": ["Rule 1", "Rule 2", "Rule 3", "Rule 4"]
 }
 
-Generate exactly 11 scenarios covering: best version, ecosystem credibility, ultra-short 2-3 sentences, content hook, curiosity gap, inbound response, peer intelligence, challenge/insight, role adjacency, credibility drop, wildcard. Each must be unique and immediately sendable. rrColor must be green amber or red. scoreLabel must be Strong / Moderate / Weak / Critical Issues.`;
+Generate exactly 11 scenarios covering: best version, ecosystem credibility, ultra-short 2-3 sentences, content hook, curiosity gap, inbound response, peer intelligence, challenge/insight, role adjacency, credibility drop, wildcard. Each unique and immediately sendable. rrColor must be green amber or red. scoreLabel must be Strong / Moderate / Weak / Critical Issues.`;
 
     const r = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -111,13 +111,25 @@ Generate exactly 11 scenarios covering: best version, ecosystem credibility, ult
     if (start === -1 || end === -1) {
       return res.status(500).json({ error: "No JSON found", raw: raw.slice(0, 200) });
     }
-    const parsed = JSON.parse(raw.slice(start, end + 1));
 
+    let parsed;
+    try {
+      parsed = JSON.parse(raw.slice(start, end + 1));
+    } catch(parseErr) {
+      return res.status(500).json({ error: "JSON parse failed", details: parseErr.message });
+    }
+
+    // ── Return to user FIRST — DB write never blocks response ──
     res.status(200).json(parsed);
 
+    // ── Write to Supabase async after response sent ──
     if (process.env.SUPABASE_URL && process.env.SUPABASE_KEY) {
       try {
-        const em = parsed.eminenceScores || {};
+        const em = parsed?.eminenceScores || {};
+        const sa = parsed?.signalAnalysis || {};
+        const fr = parsed?.formatRecommendation || {};
+        const snippetCount = profile?.snippets?.length || 0;
+
         await fetch(`${process.env.SUPABASE_URL}/rest/v1/analyses`, {
           method: "POST",
           headers: {
@@ -127,22 +139,35 @@ Generate exactly 11 scenarios covering: best version, ecosystem credibility, ult
             "Prefer": "return=minimal"
           },
           body: JSON.stringify({
-            target_name: name,
-            target_company: company,
-            target_role: role,
-            seniority,
-            message_preview: message.slice(0, 120),
-            word_count: message.trim().split(/\s+/).filter(Boolean).length,
-            score: parsed.overallScore,
-            score_label: parsed.scoreLabel,
-            format: parsed.formatRecommendation?.recommended,
-            profile_used: !!(profile?.snippets?.length > 0),
+            target_name: name || null,
+            target_company: company || null,
+            target_role: role || null,
+            seniority: seniority || null,
+            message_preview: message ? message.slice(0, 120) : null,
+            word_count: message ? message.trim().split(/\s+/).filter(Boolean).length : null,
+            score: parsed?.overallScore || null,
+            score_label: parsed?.scoreLabel || null,
+            format: fr?.recommended || null,
+            profile_used: snippetCount > 0,
             profile_source: profile?.source || null,
             data_source: "real",
-            rps: em.rps || null,
-            segment: em.segment || null,
-            response_rate: em.responseRateEstimate || null,
-            key_insight: em.keyInsight || null
+            rps: em?.rps || null,
+            segment: em?.segment || null,
+            response_rate: em?.responseRateEstimate || null,
+            key_insight: em?.keyInsight || null,
+            communication_style: em?.communicationStyle || null,
+            follower_signal: em?.followerSignal || null,
+            serper_snippet_count: snippetCount,
+            primary_signal: sa?.presentSignals?.[0] || null,
+            missing_signal: sa?.missingSignals?.[0] || null,
+            harmful_element: sa?.harmfulElements?.[0] || null,
+            opening_strategy: fr?.openingStrategy || null,
+            intent: null,
+            desired_outcome: null,
+            sender_name: null,
+            sender_company: null,
+            message_full: null,
+            consent_storage: false
           })
         });
       } catch(dbErr) {
@@ -151,6 +176,8 @@ Generate exactly 11 scenarios covering: best version, ecosystem credibility, ult
     }
 
   } catch(e) {
-    return res.status(500).json({ error: "Server error", details: e.message });
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Server error", details: e.message });
+    }
   }
 }
