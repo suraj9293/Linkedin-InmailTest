@@ -113,6 +113,8 @@ Generate exactly 11 scenarios covering: best version, ecosystem credibility, ult
     }
     const parsed = JSON.parse(raw.slice(start, end + 1));
 
+    res.status(200).json(parsed);
+
     if (process.env.SUPABASE_URL && process.env.SUPABASE_KEY) {
       try {
         const em = parsed.eminenceScores || {};
@@ -147,8 +149,6 @@ Generate exactly 11 scenarios covering: best version, ecosystem credibility, ult
         console.error("Supabase write failed:", dbErr.message);
       }
     }
-
-    return res.status(200).json(parsed);
 
   } catch(e) {
     return res.status(500).json({ error: "Server error", details: e.message });
