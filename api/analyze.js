@@ -38,6 +38,18 @@ FORMAT DECISION RULES:
 - Following up on a post/article → concise
 - Founder / Operator target → concise
 
+INTENT INFERENCE — silently detect from the draft message:
+- intent: one of ecosystem_intel / sales_conversation / peer_exchange / partnership / opportunity_exploration / community
+- desired_outcome: one of call_scheduled / reply_received / intro_made / awareness / meeting_booked
+
+Use detected intent to shape scenario framing:
+- ecosystem_intel → lead with curiosity and peer observation
+- sales_conversation → include a commercial signal naturally
+- opportunity_exploration → reframe as market research not job-seeking
+- peer_exchange → lead with what sender brings, not what they want
+- partnership → lead with mutual value
+- community → low-friction ask, long horizon
+
 IMPORTANT: Always generate real, usable scenarios. Never return PLACEHOLDER or BLOCKED. Use available information — even partial data is enough. If profile data is missing, infer from seniority and context.
 
 Return ONLY valid JSON, no markdown, no backticks, nothing after the closing brace:
@@ -47,6 +59,8 @@ Return ONLY valid JSON, no markdown, no backticks, nothing after the closing bra
   "scoreLabel": "Moderate",
   "primaryVerdict": "Two sentence verdict here.",
   "profileUsed": true,
+  "intent": "ecosystem_intel",
+  "desiredOutcome": "call_scheduled",
   "eminenceScores": {
     "visibility": 3,
     "reputation": 3,
@@ -124,6 +138,8 @@ Generate exactly 11 scenarios covering: best version, ecosystem credibility, ult
     if (process.env.SUPABASE_URL && process.env.SUPABASE_KEY) {
       try {
         const em = parsed?.eminenceScores || {};
+        const inferredIntent = parsed?.intent || null;
+        const inferredOutcome = parsed?.desiredOutcome || null;
         const sa = parsed?.signalAnalysis || {};
         const fr = parsed?.formatRecommendation || {};
         const snippetCount = profile?.snippets?.length || 0;
@@ -152,8 +168,8 @@ Generate exactly 11 scenarios covering: best version, ecosystem credibility, ult
           missing_signal: sa?.missingSignals?.[0] || null,
           harmful_element: sa?.harmfulElements?.[0] || null,
           opening_strategy: fr?.openingStrategy || null,
-          intent: null,
-          desired_outcome: null,
+          intent: inferredIntent,
+          desired_outcome: inferredOutcome,
           sender_name: null,
           sender_company: null,
           message_full: null,

@@ -520,6 +520,15 @@ export default function App() {
               </div>
               <div className="verdict-body">
                 <div className="verdict-row"><div className="v-icon">◈</div><div className="v-text">{result.primaryVerdict}</div></div>
+                {result.intent && (
+                  <div className="verdict-row">
+                    <div className="v-icon" style={{color:"var(--blue)"}}>◎</div>
+                    <div className="v-text" style={{fontSize:11}}>
+                      <strong>Detected intent:</strong> {result.intent.replace(/_/g,' ')}
+                      {result.desiredOutcome && <span> · <strong>outcome:</strong> {result.desiredOutcome.replace(/_/g,' ')}</span>}
+                    </div>
+                  </div>
+                )}
                 {result.signalAnalysis?.missingSignals?.length > 0 && (
                   <div className="verdict-row"><div className="v-icon" style={{color:"var(--red)"}}>✗</div><div className="v-text"><strong>Missing:</strong> {result.signalAnalysis.missingSignals.join(" · ")}</div></div>
                 )}
