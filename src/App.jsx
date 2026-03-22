@@ -222,6 +222,8 @@ export default function App() {
   const [expanded, setExpanded] = useState(null);
   const [loadingStep, setLoadingStep] = useState("Analyzing profile signals...");
   const [profile, setProfile] = useState(null);
+  const [senderBg, setSenderBg] = useState('');
+  const [showSenderSetup, setShowSenderSetup] = useState(false);
   const [profileStatus, setProfileStatus] = useState("idle");
   const [insights, setInsights] = useState(null);
   const [insightsLoading, setInsightsLoading] = useState(false);
@@ -237,6 +239,8 @@ export default function App() {
       } catch(e) {}
     })();
     fetchInsights();
+      const saved = localStorage.getItem('sender_background');
+      if (saved) setSenderBg(saved);
   }, []);
 
   async function fetchInsights() {
@@ -294,6 +298,7 @@ export default function App() {
           targetName: form.targetName, targetCompany: form.targetCompany,
           targetRole: form.targetRole, seniority: form.seniority,
           context: form.context, message: form.message,
+          senderBackground: senderBg || null,
           profile: profile || null
         })
       });
@@ -408,6 +413,26 @@ export default function App() {
               <textarea placeholder="Paste your message here. Write it exactly as you would send it." value={form.message} onChange={e=>setField("message",e.target.value)} rows={7}/>
             </div>
 
+            <div style={{marginBottom:14}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:showSenderSetup?10:0,cursor:'pointer'}} onClick={()=>setShowSenderSetup(s=>!s)}>
+                <span style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-3)',letterSpacing:'.14em',textTransform:'uppercase'}}>
+                  {senderBg ? '◈ About you · set' : '◈ About you · not set'}
+                </span>
+                <span style={{fontSize:10,color:'var(--text-3)'}}>{showSenderSetup?'▲':'▼'}</span>
+              </div>
+              {showSenderSetup && (
+                <div style={{marginTop:8}}>
+                  <textarea
+                    rows={3}
+                    placeholder="Describe yourself in 2-3 sentences. Include your role, what you do, and 2-3 named clients or firms you've worked with."
+                    value={senderBg}
+                    onChange={e=>{setSenderBg(e.target.value);localStorage.setItem('sender_background',e.target.value);}}
+                    style={{fontSize:13,lineHeight:1.6}}
+                  />
+                  <div style={{fontSize:11,color:'var(--text-3)',marginTop:5}}>Stored locally. Used to personalize every analysis.</div>
+                </div>
+              )}
+            </div>
             <button className="analyze-btn" onClick={analyze} disabled={loading || !form.message.trim() || !form.targetName.trim()}>
               {profileStatus==="ready" ? "▶ Analyze with Profile Intelligence" : "▶ Analyze Message + Generate Scenarios"}
             </button>

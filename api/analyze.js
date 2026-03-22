@@ -13,6 +13,7 @@ export default async function handler(req, res) {
     const context = b.context || b.contactContext || b.contact_context || "";
     const message = b.message || b.draftMessage || b.draft_message || "";
     const profile = b.profile || null;
+    const senderBackground = b.senderBackground || "Technology Ecosystem Strategist — 9 years in competitive intelligence, partner ecosystem strategy, market positioning for B2B AI/IT services. Clients: Korcomptenz, Bitwise, Tredence, HCLTech, Mastech Digital, Ascendion, Altimetrik.";
 
     const serperLayer = profile?.snippets?.length > 0
       ? `LIVE WEB INTELLIGENCE (use to calibrate silently):
@@ -25,7 +26,7 @@ TARGET: ${name || "Unknown"} | ${role || "Unknown"} | ${company || "Unknown"} | 
 
 ${serperLayer}
 
-SENDER: Technology Ecosystem Strategist — 9 years in competitive intelligence, partner ecosystem strategy, market positioning for B2B AI/IT services. Clients: Korcomptenz, Bitwise, Tredence, HCLTech, Mastech Digital, Ascendion, Altimetrik.
+SENDER: ${senderBackground}
 
 DRAFT MESSAGE: "${message}"
 
