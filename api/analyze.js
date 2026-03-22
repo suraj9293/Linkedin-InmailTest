@@ -119,10 +119,7 @@ Generate exactly 11 scenarios covering: best version, ecosystem credibility, ult
       return res.status(500).json({ error: "JSON parse failed", details: parseErr.message });
     }
 
-    // ── Return to user FIRST — DB write never blocks response ──
-    res.status(200).json(parsed);
-
-    // ── Write to Supabase async after response sent ──
+    // ── Write to Supabase BEFORE response with 3s timeout ──
     if (process.env.SUPABASE_URL && process.env.SUPABASE_KEY) {
       try {
         const em = parsed?.eminenceScores || {};
@@ -130,7 +127,43 @@ Generate exactly 11 scenarios covering: best version, ecosystem credibility, ult
         const fr = parsed?.formatRecommendation || {};
         const snippetCount = profile?.snippets?.length || 0;
 
-        await fetch(`${process.env.SUPABASE_URL}/rest/v1/analyses`, {
+        const dbPayload = {
+          target_name: name || null,
+          target_company: company || null,
+          target_role: role || null,
+          seniority: seniority || null,
+          message_preview: message ? message.slice(0, 120) : null,
+          word_count: message ? message.trim().split(/\s+/).filter(Boolean).length : null,
+          score: parsed?.overallScore || null,
+          score_label: parsed?.scoreLabel || null,
+          format: fr?.recommended || null,
+          profile_used: snippetCount > 0,
+          profile_source: profile?.source || null,
+          data_source: "real",
+          rps: em?.rps || null,
+          segment: em?.segment || null,
+          response_rate: em?.responseRateEstimate || null,
+          key_insight: em?.keyInsight || null,
+          communication_style: em?.communicationStyle || null,
+          follower_signal: em?.followerSignal || null,
+          serper_snippet_count: snippetCount,
+          primary_signal: sa?.presentSignals?.[0] || null,
+          missing_signal: sa?.missingSignals?.[0] || null,
+          harmful_element: sa?.harmfulElements?.[0] || null,
+          opening_strategy: fr?.openingStrategy || null,
+          intent: null,
+          desired_outcome: null,
+          sender_name: null,
+          sender_company: null,
+          message_full: null,
+          consent_storage: false
+        };
+
+        // 3 second timeout — never blocks user
+        const timeout = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("DB timeout")), 3000)
+        );
+        const writeOp = fetch(`${process.env.SUPABASE_URL}/rest/v1/analyses`, {
           method: "POST",
           headers: {
             "apikey": process.env.SUPABASE_KEY,
@@ -138,46 +171,19 @@ Generate exactly 11 scenarios covering: best version, ecosystem credibility, ult
             "Content-Type": "application/json",
             "Prefer": "return=minimal"
           },
-          body: JSON.stringify({
-            target_name: name || null,
-            target_company: company || null,
-            target_role: role || null,
-            seniority: seniority || null,
-            message_preview: message ? message.slice(0, 120) : null,
-            word_count: message ? message.trim().split(/\s+/).filter(Boolean).length : null,
-            score: parsed?.overallScore || null,
-            score_label: parsed?.scoreLabel || null,
-            format: fr?.recommended || null,
-            profile_used: snippetCount > 0,
-            profile_source: profile?.source || null,
-            data_source: "real",
-            rps: em?.rps || null,
-            segment: em?.segment || null,
-            response_rate: em?.responseRateEstimate || null,
-            key_insight: em?.keyInsight || null,
-            communication_style: em?.communicationStyle || null,
-            follower_signal: em?.followerSignal || null,
-            serper_snippet_count: snippetCount,
-            primary_signal: sa?.presentSignals?.[0] || null,
-            missing_signal: sa?.missingSignals?.[0] || null,
-            harmful_element: sa?.harmfulElements?.[0] || null,
-            opening_strategy: fr?.openingStrategy || null,
-            intent: null,
-            desired_outcome: null,
-            sender_name: null,
-            sender_company: null,
-            message_full: null,
-            consent_storage: false
-          })
+          body: JSON.stringify(dbPayload)
         });
+
+        await Promise.race([writeOp, timeout]);
       } catch(dbErr) {
         console.error("Supabase write failed:", dbErr.message);
       }
     }
 
+    // ── Return result after DB write completes or times out ──
+    return res.status(200).json(parsed);
+
   } catch(e) {
-    if (!res.headersSent) {
-      res.status(500).json({ error: "Server error", details: e.message });
-    }
+    return res.status(500).json({ error: "Server error", details: e.message });
   }
 }
